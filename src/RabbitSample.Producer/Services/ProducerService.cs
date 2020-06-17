@@ -23,17 +23,21 @@ namespace RabbitSample.Producer.Services
         
         public void SendMessage()
         {
-            using(var channel = _rabbitConnection.Connection.CreateModel())
+            using(var channel = _rabbitConnection.CreateModel())
             {
-                var message = new Message(Guid.NewGuid(), DateTime.Now);
+                var message = new IntegrationEvent(Guid.NewGuid(), DateTime.Now);
                 
                 channel.QueueDeclare(queue: _queue,
-                    durable: false,
+                    durable: true,
                     exclusive: false,
                     autoDelete: false,
                     arguments: null);
+
                 
-                var body = JsonSerializer.SerializeToUtf8Bytes(message);
+                var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
+
+                var properties = channel.CreateBasicProperties();
+                properties.Persistent = true;
 
                 channel.BasicPublish(
                     exchange: "",
