@@ -5,7 +5,19 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Folder Include="Messages" />
+      <Compile Remove="Messages\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Remove="Messages\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="Messages\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="RabbitMQ.Client" Version="6.1.0" />
     </ItemGroup>
 
 </Project>
