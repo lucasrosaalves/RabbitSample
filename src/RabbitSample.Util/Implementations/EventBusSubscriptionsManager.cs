@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace RabbitSample.Util
 {
-    public class EventBusSubscriptionsManager
+    public class EventBusSubscriptionsManager : IEventBusSubscriptionsManager
     {
         private readonly Dictionary<string, List<SubscriptionInfo>> _handlers;
         private readonly List<Type> _eventTypes;

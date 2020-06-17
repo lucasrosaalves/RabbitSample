@@ -1,6 +1,6 @@
-﻿using System;
-using Microsoft.AspNetCore.Mvc;
-using RabbitSample.Producer.Services;
+﻿using Microsoft.AspNetCore.Mvc;
+using RabbitSample.Util;
+using System;
 
 namespace RabbitSample.Producer.Controllers
 {
@@ -8,12 +8,14 @@ namespace RabbitSample.Producer.Controllers
     [Route("[controller]")]
     public class ProducerController : ControllerBase
     {
-        private readonly IProducerService _producerService;
 
-        public ProducerController(IProducerService producerService)
+        private readonly IEventBus _eventBus;
+
+        public ProducerController(IEventBus eventBus)
         {
-            _producerService = producerService;
+            _eventBus = eventBus;
         }
+
         [HttpGet("")]
         public IActionResult Get()
         {
@@ -25,7 +27,10 @@ namespace RabbitSample.Producer.Controllers
         {
             try
             {
-                _producerService.SendMessage();
+                var @event = new OrderIntegrationEvent(Guid.NewGuid(), DateTime.Now);
+
+                _eventBus.Publish(@event);
+
                 return Ok();
             }
             catch (Exception ex)

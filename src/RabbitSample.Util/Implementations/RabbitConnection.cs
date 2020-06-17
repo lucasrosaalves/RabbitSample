@@ -11,18 +11,22 @@ namespace RabbitSample.Util
 {
     public class RabbitConnection : IRabbitConnection
     {
+        private readonly IConnectionFactory _connectionFactory;
         private readonly ILogger<RabbitConnection> _logger;
-        private readonly ConnectionFactory _connectionFactory;
-        IConnection _connection;
+        private IConnection _connection;
+        private readonly int _retryCount;
+
         bool _disposed;
         object sync_root = new object();
-        private readonly int _retryCount = 5;
 
-        public RabbitConnection(ILogger<RabbitConnection> logger)
+        public RabbitConnection(
+            IConnectionFactory connectionFactory,
+            ILogger<RabbitConnection> logger,
+            int? retryCount)
         {
             _logger = logger;
-            _connectionFactory = new ConnectionFactory() { HostName = "localhost" };
-            TryConnect();
+            _connectionFactory = connectionFactory ?? new ConnectionFactory() { HostName = "localhost" };
+            _retryCount = retryCount ?? 5;
         }
 
 

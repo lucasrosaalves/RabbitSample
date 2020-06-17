@@ -18,24 +18,23 @@ namespace RabbitSample.Util
     {
         const string BROKER_NAME = "rabbitsample_event_bus";
 
-        private readonly IRabbitConnection _persistentConnection;
-        private readonly ILogger<EventBus> _logger;
+        private readonly IRabbitConnection _rabbitConnection;
         private readonly IEventBusSubscriptionsManager _subsManager;
+        private readonly ILogger<EventBus> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly int _retryCount;
-
         private IModel _consumerChannel;
         private string _queueName;
 
         public EventBus(
-            IRabbitConnection persistentConnection,
-            ILogger<EventBus> logger,
+            IRabbitConnection rabbitConnection,
             IEventBusSubscriptionsManager subsManager,
             IServiceProvider serviceProvider,
+            ILogger<EventBus> logger,
             string queueName = null,
             int retryCount = 5)
         {
-            _persistentConnection = persistentConnection;
+            _rabbitConnection = rabbitConnection;
             _logger = logger;
             _subsManager = subsManager;
             _serviceProvider = serviceProvider;
@@ -47,12 +46,12 @@ namespace RabbitSample.Util
 
         private void SubsManager_OnEventRemoved(object sender, string eventName)
         {
-            if (!_persistentConnection.IsConnected)
+            if (!_rabbitConnection.IsConnected)
             {
-                _persistentConnection.TryConnect();
+                _rabbitConnection.TryConnect();
             }
 
-            using (var channel = _persistentConnection.CreateModel())
+            using (var channel = _rabbitConnection.CreateModel())
             {
                 channel.QueueUnbind(queue: _queueName,
                     exchange: BROKER_NAME,
@@ -68,9 +67,9 @@ namespace RabbitSample.Util
 
         public void Publish(IntegrationEvent @event)
         {
-            if (!_persistentConnection.IsConnected)
+            if (!_rabbitConnection.IsConnected)
             {
-                _persistentConnection.TryConnect();
+                _rabbitConnection.TryConnect();
             }
 
             var policy = Policy.Handle<BrokerUnreachableException>()
@@ -82,7 +81,7 @@ namespace RabbitSample.Util
 
             var eventName = @event.GetType().Name;
 
-            using (var channel = _persistentConnection.CreateModel())
+            using (var channel = _rabbitConnection.CreateModel())
             {
 
                 channel.ExchangeDeclare(exchange: BROKER_NAME, type: "direct");
@@ -132,12 +131,12 @@ namespace RabbitSample.Util
             var containsKey = _subsManager.HasSubscriptionsForEvent(eventName);
             if (!containsKey)
             {
-                if (!_persistentConnection.IsConnected)
+                if (!_rabbitConnection.IsConnected)
                 {
-                    _persistentConnection.TryConnect();
+                    _rabbitConnection.TryConnect();
                 }
 
-                using (var channel = _persistentConnection.CreateModel())
+                using (var channel = _rabbitConnection.CreateModel())
                 {
                     channel.QueueBind(queue: _queueName,
                                       exchange: BROKER_NAME,
@@ -207,12 +206,12 @@ namespace RabbitSample.Util
 
         private IModel CreateConsumerChannel()
         {
-            if (!_persistentConnection.IsConnected)
+            if (!_rabbitConnection.IsConnected)
             {
-                _persistentConnection.TryConnect();
+                _rabbitConnection.TryConnect();
             }
 
-            var channel = _persistentConnection.CreateModel();
+            var channel = _rabbitConnection.CreateModel();
 
             channel.ExchangeDeclare(exchange: BROKER_NAME, type: "direct");
 
