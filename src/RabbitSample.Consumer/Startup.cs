@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using RabbitMQ.Client;
+using RabbitSample.Consumer.Handlers;
 using RabbitSample.Util;
+using RabbitSample.Util.Extensions;
 
 namespace RabbitSample.Consumer
 {
@@ -21,30 +21,9 @@ namespace RabbitSample.Consumer
         {
             services.AddControllers();
 
-            services.AddSingleton<IEventBusSubscriptionsManager, EventBusSubscriptionsManager>();
+            services.AddTransient<OrderIntegrationEventHandler>();
 
-            services.AddSingleton<IRabbitConnection, RabbitConnection>(sp =>
-            {
-                var factory = new ConnectionFactory()
-                {
-                    HostName = "localhost",
-                    DispatchConsumersAsync = true
-                };
-
-                var logger = sp.GetRequiredService<ILogger<RabbitConnection>>();
-
-                return new RabbitConnection(factory, logger, 5);
-            });
-
-            services.AddSingleton<IEventBus, EventBus>(sp =>
-            {
-                var rabbitConnection = sp.GetRequiredService<IRabbitConnection>();
-                var subcriptionsManager = sp.GetRequiredService<IEventBusSubscriptionsManager>();
-                var logger = sp.GetRequiredService<ILogger<EventBus>>();
-
-                return new EventBus(rabbitConnection, subcriptionsManager, sp, logger, "consumer", 5);
-            });
-
+            services.AddRabbit("localhost", "consumer");
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -69,7 +48,7 @@ namespace RabbitSample.Consumer
         {
             var eventBus = app.ApplicationServices.GetRequiredService<IEventBus>();
 
-            eventBus.Subscribe<OrderIntegrationEvent, IIntegrationEventHandler<OrderIntegrationEvent>>();
+            eventBus.Subscribe<OrderIntegrationEvent, OrderIntegrationEventHandler> ();
 
         }
     }

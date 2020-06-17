@@ -3,9 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using RabbitMQ.Client;
-using RabbitSample.Util;
+using RabbitSample.Util.Extensions;
 
 namespace RabbitSample.Producer
 {
@@ -22,29 +20,7 @@ namespace RabbitSample.Producer
         {
             services.AddControllers();
 
-            services.AddSingleton<IEventBusSubscriptionsManager, EventBusSubscriptionsManager>();
-
-            services.AddSingleton<IRabbitConnection, RabbitConnection>(sp =>
-            {
-                var factory = new ConnectionFactory()
-                {
-                    HostName = "localhost",
-                    DispatchConsumersAsync = true
-                };
-
-                var logger = sp.GetRequiredService<ILogger<RabbitConnection>>();
-
-                return new RabbitConnection(factory, logger, 5);
-            });
-
-            services.AddSingleton<IEventBus, EventBus>(sp =>
-            {
-                var rabbitConnection = sp.GetRequiredService<IRabbitConnection>();
-                var subcriptionsManager = sp.GetRequiredService<IEventBusSubscriptionsManager>();
-                var logger = sp.GetRequiredService<ILogger<EventBus>>();
-
-                return new EventBus(rabbitConnection, subcriptionsManager, sp, logger, "producer", 5);
-            });
+            services.AddRabbit("localhost", "producer");
         }
         
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)

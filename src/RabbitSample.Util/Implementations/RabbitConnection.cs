@@ -11,22 +11,21 @@ namespace RabbitSample.Util
 {
     public class RabbitConnection : IRabbitConnection
     {
+        const int RETRY_COUNT = 5;
         private readonly IConnectionFactory _connectionFactory;
         private readonly ILogger<RabbitConnection> _logger;
         private IConnection _connection;
-        private readonly int _retryCount;
+
 
         bool _disposed;
         object sync_root = new object();
 
         public RabbitConnection(
             IConnectionFactory connectionFactory,
-            ILogger<RabbitConnection> logger,
-            int? retryCount)
+            ILogger<RabbitConnection> logger)
         {
             _logger = logger;
-            _connectionFactory = connectionFactory ?? new ConnectionFactory() { HostName = "localhost" };
-            _retryCount = retryCount ?? 5;
+            _connectionFactory = connectionFactory;
         }
 
 
@@ -65,7 +64,7 @@ namespace RabbitSample.Util
             {
                 var policy = Policy.Handle<SocketException>()
                     .Or<BrokerUnreachableException>()
-                    .WaitAndRetry(_retryCount, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), (ex, time) =>
+                    .WaitAndRetry(RETRY_COUNT, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), (ex, time) =>
                     {
                         _logger.LogWarning(ex, "RabbitMQ Client could not connect after {TimeOut}s ({ExceptionMessage})", $"{time.TotalSeconds:n1}", ex.Message);
                     }

@@ -5,7 +5,6 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
@@ -17,12 +16,12 @@ namespace RabbitSample.Util
     public class EventBus : IEventBus, IDisposable
     {
         const string BROKER_NAME = "rabbitsample_event_bus";
+        const int RETRY_COUNT = 5;
 
         private readonly IRabbitConnection _rabbitConnection;
         private readonly IEventBusSubscriptionsManager _subsManager;
         private readonly ILogger<EventBus> _logger;
         private readonly IServiceProvider _serviceProvider;
-        private readonly int _retryCount;
         private IModel _consumerChannel;
         private string _queueName;
 
@@ -31,8 +30,7 @@ namespace RabbitSample.Util
             IEventBusSubscriptionsManager subsManager,
             IServiceProvider serviceProvider,
             ILogger<EventBus> logger,
-            string queueName = null,
-            int retryCount = 5)
+            string queueName = null)
         {
             _rabbitConnection = rabbitConnection;
             _logger = logger;
@@ -40,7 +38,6 @@ namespace RabbitSample.Util
             _serviceProvider = serviceProvider;
             _queueName = queueName;
             _consumerChannel = CreateConsumerChannel();
-            _retryCount = retryCount;
             _subsManager.OnEventRemoved += SubsManager_OnEventRemoved;
         }
 
@@ -74,7 +71,7 @@ namespace RabbitSample.Util
 
             var policy = Policy.Handle<BrokerUnreachableException>()
                 .Or<SocketException>()
-                .WaitAndRetry(_retryCount, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), (ex, time) =>
+                .WaitAndRetry(RETRY_COUNT, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)), (ex, time) =>
                 {
                     _logger.LogWarning(ex, "Could not publish event: {EventId} after {Timeout}s ({ExceptionMessage})", @event.Id, $"{time.TotalSeconds:n1}", ex.Message);
                 });
@@ -105,43 +102,33 @@ namespace RabbitSample.Util
             }
         }
 
-        public void SubscribeDynamic<TH>(string eventName)
-            where TH : IDynamicIntegrationEventHandler
-        {
-            DoInternalSubscription(eventName);
-
-            _subsManager.AddDynamicSubscription<TH>(eventName);
-
-            StartBasicConsume();
-        }
-
         public void Subscribe<T, TH>()
             where T : IntegrationEvent
             where TH : IIntegrationEventHandler<T>
         {
             var eventName = _subsManager.GetEventKey<T>();
-            DoInternalSubscription(eventName);
+            Subscribe(eventName);
 
             _subsManager.AddSubscription<T, TH>();
             StartBasicConsume();
         }
 
-        private void DoInternalSubscription(string eventName)
+        private void Subscribe(string eventName)
         {
             var containsKey = _subsManager.HasSubscriptionsForEvent(eventName);
-            if (!containsKey)
-            {
-                if (!_rabbitConnection.IsConnected)
-                {
-                    _rabbitConnection.TryConnect();
-                }
 
-                using (var channel = _rabbitConnection.CreateModel())
-                {
-                    channel.QueueBind(queue: _queueName,
-                                      exchange: BROKER_NAME,
-                                      routingKey: eventName);
-                }
+            if (containsKey) { return; }
+
+            if (!_rabbitConnection.IsConnected)
+            {
+                _rabbitConnection.TryConnect();
+            }
+
+            using (var channel = _rabbitConnection.CreateModel())
+            {
+                channel.QueueBind(queue: _queueName,
+                                  exchange: BROKER_NAME,
+                                  routingKey: eventName);
             }
         }
 
@@ -150,12 +137,6 @@ namespace RabbitSample.Util
             where TH : IIntegrationEventHandler<T>
         {
             _subsManager.RemoveSubscription<T, TH>();
-        }
-
-        public void UnsubscribeDynamic<TH>(string eventName)
-            where TH : IDynamicIntegrationEventHandler
-        {
-            _subsManager.RemoveDynamicSubscription<TH>(eventName);
         }
 
         public void Dispose()
@@ -171,10 +152,7 @@ namespace RabbitSample.Util
 
         private void StartBasicConsume()
         {
-            if (_consumerChannel is null)
-            {
-                return;
-            }
+            if (_consumerChannel is null) { return; }
 
             var consumer = new AsyncEventingBasicConsumer(_consumerChannel);
 
@@ -195,13 +173,12 @@ namespace RabbitSample.Util
             try
             {
                 await ProcessEvent(eventName, message);
+                _consumerChannel.BasicAck(eventArgs.DeliveryTag, multiple: false);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogWarning(ex, "ERROR Processing message \"{Message}\"", message);
+                _consumerChannel.BasicNack(deliveryTag: eventArgs.DeliveryTag, multiple: false, requeue: true);
             }
-
-            _consumerChannel.BasicAck(eventArgs.DeliveryTag, multiple: false);
         }
 
         private IModel CreateConsumerChannel()
@@ -235,11 +212,10 @@ namespace RabbitSample.Util
         {
             if (!_subsManager.HasSubscriptionsForEvent(eventName))
             {
-                _logger.LogWarning("No subscription for RabbitMQ event: {EventName}", eventName);
                 return;
             }
 
-            var subscriptions = _subsManager.GetHandlersForEvent(eventName) ?? new List<SubscriptionInfo>();
+            var subscriptions = _subsManager.GetHandlersForEvent(eventName);
 
             if (!subscriptions.Any()) { return; }
 
